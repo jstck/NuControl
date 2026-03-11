@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NuEVI Config</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <link rel="stylesheet" href="config.css">
+</head>
+<body>
+  <div id="app">
+    <h1>NuEVI Config</h1>
+    <div class="error-banner" v-if="loadError">{{ loadError }}</div>
+
+    <div class="meta">
+      <div class="meta-row">
+        <input class="meta-name" type="text" v-model="configName" placeholder="Config name" @input="touch">
+        <div class="meta-actions">
+          <button @click="triggerLoad">Load</button>
+          <button @click="saveConfig">Save</button>
+          <input ref="fileInput" type="file" accept=".json" style="display:none" @change="loadConfig">
+        </div>
+      </div>
+      <textarea class="meta-comment" v-model="configComment" placeholder="Comment" rows="2" @input="touch"></textarea>
+      <div class="meta-timestamp" v-if="timeCreated">Last edited: {{ timeCreated }}</div>
+    </div>
+
+    <div class="warn-banner" v-if="loadWarnings.length">
+      <div v-for="w in loadWarnings" :key="w">{{ w }}</div>
+    </div>
+
+    <template v-for="section in sections" :key="section.name">
+      <template v-if="sectionVisible(section)">
+        <h2 class="section-heading" @click="section._collapsed = !section._collapsed">
+          <span class="section-chevron">{{ section._collapsed ? '▶' : '▼' }}</span>
+          {{ section.name }}
+        </h2>
+        <div class="section-items" v-show="!section._collapsed">
+          <div
+            v-for="(item, id) in section.items"
+            :key="id"
+            class="item"
+            :class="{ invalid: item._error }"
+            v-show="itemVisible(item)"
+          >
+            <div class="item-row">
+              <div class="item-left">
+                <span class="item-label">{{ item.friendlyName || id }}</span>
+                <span class="item-id" v-if="item.friendlyName">{{ id }}</span>
+              </div>
+              <div class="item-right">
+                <span class="item-range">{{ itemRangeText(item) }}</span>
+                <input
+                  type="text"
+                  inputmode="numeric"
+                  v-model="item._raw"
+                  @input="validate(item)"
+                  @blur="validate(item); normalize(item)"
+                >
+                <span class="item-error" v-if="item._error">{{ item._error }}</span>
+              </div>
+            </div>
+            <input
+              v-if="item.uiModel === 'slider'"
+              type="range"
+              class="item-slider"
+              :min="item.min"
+              :max="item.max"
+              :value="sliderValue(item)"
+              @input="setSlider(item, $event.target.value)"
+            >
+          </div>
+        </div>
+      </template>
+    </template>
+  </div>
+
+  <script>
+    const { createApp, reactive, ref, computed } = Vue;
+
+    createApp({
+      setup() {
+        const sections = reactive([]);
+        const loadError = ref('');
+        const loadWarnings = ref([]);
+        const configName = ref('');
+        const configComment = ref('');
+        const timeCreated = ref('');
+        const fileInput = ref(null);
+
+        function getOffset(item) {
+          const m = (item.dataModel || '').match(/^offset:(-?\d+)$/);
+          return m ? parseInt(m[1], 10) : 0;
+        }
+
+        function toDisplay(storedVal, offset) {
+          const d = storedVal - offset;
+          return (offset !== 0 && d > 0) ? '+' + d : String(d);
+        }
+
+        fetch('config-items.json')
+          .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+          .then(data => {
+            for (const section of data) {
+              const items = {};
+              for (const [id, item] of Object.entries(section.items)) {
+                const offset = getOffset(item);
+                items[id] = { ...item, _raw: toDisplay(item.factoryDefault, offset), _error: '' };
+              }
+              sections.push({ name: section.name, items, _collapsed: false });
+            }
+          })
+          .catch(e => { loadError.value = `Failed to load config-items.json: ${e.message}`; });
+
+        // Flat lookup: id -> item ref, built after sections load
+        function findItem(id) {
+          for (const section of sections) {
+            if (id in section.items) return section.items[id];
+          }
+          return null;
+        }
+
+        function touch() {
+          timeCreated.value = new Date().toISOString();
+        }
+
+        const currentVersion = computed(() => {
+          const item = findItem('VERSION');
+          if (!item) return Infinity;
+          const n = parseInt(item._raw, 10);
+          return isNaN(n) ? Infinity : n;
+        });
+
+        function itemVisible(item) {
+          return item.minVersion <= currentVersion.value;
+        }
+
+        function sectionVisible(section) {
+          return Object.values(section.items).some(item => itemVisible(item));
+        }
+
+        function itemRangeText(item) {
+          const offset = getOffset(item);
+          return `${item.min - offset} – ${item.max - offset}`;
+        }
+
+        function sliderValue(item) {
+          const offset = getOffset(item);
+          const n = parseInt(item._raw, 10);
+          const stored = isNaN(n) ? item.factoryDefault : n + offset;
+          return Math.min(item.max, Math.max(item.min, stored));
+        }
+
+        function setSlider(item, storedStr) {
+          item._raw = toDisplay(parseInt(storedStr, 10), getOffset(item));
+          validate(item);
+        }
+
+        function validate(item) {
+          const offset = getOffset(item);
+          const raw = item._raw.trim();
+          const n = parseInt(raw, 10);
+          if (raw === '' || isNaN(n) || !Number.isInteger(n)) {
+            item._error = 'Must be an integer';
+          } else if (n + offset < item.min || n + offset > item.max) {
+            item._error = `Must be between ${item.min - offset} and ${item.max - offset}`;
+          } else {
+            item._error = '';
+          }
+          touch();
+        }
+
+        function normalize(item) {
+          if (item._error) return;
+          const offset = getOffset(item);
+          if (offset === 0) return;
+          const n = parseInt(item._raw.trim(), 10);
+          if (!isNaN(n)) item._raw = toDisplay(n + offset, offset);
+        }
+
+        function triggerLoad() {
+          fileInput.value.value = '';
+          fileInput.value.click();
+        }
+
+        function loadConfig(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = e => {
+            try {
+              loadError.value = '';
+              loadWarnings.value = [];
+              const data = JSON.parse(e.target.result);
+              configName.value = data.info?.name ?? '';
+              configComment.value = data.info?.comment ?? '';
+              timeCreated.value = data.info?.timeCreated ?? '';
+
+              const fileConfig = data.config ?? {};
+              const fileVersion = fileConfig.VERSION ?? 0;
+
+              // Reset all items to factory defaults first
+              for (const section of sections) {
+                for (const item of Object.values(section.items)) {
+                  item._raw = toDisplay(item.factoryDefault, getOffset(item));
+                  item._error = '';
+                }
+              }
+
+              // Apply file values
+              for (const [id, value] of Object.entries(fileConfig)) {
+                const item = findItem(id);
+                if (item) {
+                  item._raw = toDisplay(value, getOffset(item));
+                  validate(item);
+                }
+              }
+
+              // Restore timestamp from file (validate() overwrote it)
+              timeCreated.value = data.info?.timeCreated ?? timeCreated.value;
+
+              // Generate warnings
+              const missingNames = [];
+              const extraNames = [];
+              for (const section of sections) {
+                for (const [id, item] of Object.entries(section.items)) {
+                  if (id === 'VERSION') continue;
+                  const inFile = id in fileConfig;
+                  const belongs = item.minVersion <= fileVersion;
+                  if (belongs && !inFile) missingNames.push(item.friendlyName || id);
+                  if (!belongs && inFile) extraNames.push(item.friendlyName || id);
+                }
+              }
+              const warnings = [];
+              if (missingNames.length > 0)
+                warnings.push(`${missingNames.length} item(s) missing from file, reset to factory defaults: ${missingNames.join(', ')}`);
+              if (extraNames.length > 0)
+                warnings.push(`${extraNames.length} item(s) from a newer config version are loaded but hidden: ${extraNames.join(', ')}`);
+              loadWarnings.value = warnings;
+            } catch {
+              loadError.value = 'Failed to parse config file.';
+            }
+          };
+          reader.readAsText(file);
+        }
+
+        function saveConfig() {
+          const config = {};
+          for (const section of sections) {
+            for (const [id, item] of Object.entries(section.items)) {
+              if (!itemVisible(item)) continue;
+              const offset = getOffset(item);
+              const n = parseInt(item._raw, 10);
+              if (!isNaN(n)) config[id] = n + offset;
+            }
+          }
+          const data = {
+            info: {
+              name: configName.value,
+              comment: configComment.value,
+              timeCreated: timeCreated.value || new Date().toISOString(),
+            },
+            config,
+          };
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = (configName.value.trim() || 'nuevi-config') + '.json';
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+
+        return { sections, loadError, loadWarnings, configName, configComment, timeCreated, fileInput,
+                 touch, validate, normalize, sliderValue, setSlider, itemRangeText,
+                 itemVisible, sectionVisible, triggerLoad, loadConfig, saveConfig };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
