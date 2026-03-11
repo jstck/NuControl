@@ -57,6 +57,10 @@
                   @input="validate(item)"
                   @blur="validate(item); normalize(item)"
                 >
+                <div class="item-stepper">
+                  <button @click="step(item, 1)">▲</button>
+                  <button @click="step(item, -1)">▼</button>
+                </div>
                 <span class="item-error" v-if="item._error">{{ item._error }}</span>
               </div>
             </div>
@@ -170,6 +174,14 @@
           touch();
         }
 
+        function step(item, delta) {
+          const offset = getOffset(item);
+          const n = parseInt(item._raw, 10);
+          const stored = (isNaN(n) ? item.factoryDefault - offset : n) + offset;
+          item._raw = toDisplay(Math.min(item.max, Math.max(item.min, stored + delta)), offset);
+          validate(item);
+        }
+
         function normalize(item) {
           if (item._error) return;
           const offset = getOffset(item);
@@ -273,7 +285,7 @@
 
         return { sections, loadError, loadWarnings, configName, configComment, timeCreated, fileInput,
                  touch, validate, normalize, sliderValue, setSlider, itemRangeText,
-                 itemVisible, sectionVisible, triggerLoad, loadConfig, saveConfig };
+                 itemVisible, sectionVisible, step, triggerLoad, loadConfig, saveConfig };
       }
     }).mount('#app');
   </script>
