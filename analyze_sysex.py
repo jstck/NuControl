@@ -70,6 +70,13 @@ def main():
     command      = sysex[3:11].decode('ascii', errors='replace')
     payload_size = from_midi_u16(sysex[11], sysex[12])
 
+    # ── MSB check (all sysex bytes must be 0x00–0x7F) ────────────────────────
+    msb_offenders = [i for i, b in enumerate(sysex) if b & 0x80]
+    if msb_offenders:
+        offsets = ', '.join(f'{i:02X}' for i in msb_offenders)
+        print(warn(f"MSB set in sysex data at byte offset(s): {offsets}"))
+        print()
+
     # ── Header ────────────────────────────────────────────────────────────────
     vendor_fmt = ' '.join(f'{b:02X}' for b in vendor_id)
     vendor_line = f"Vendor ID:    {vendor_fmt}"
@@ -115,7 +122,7 @@ def main():
         else:
             line = f"  {addr:02X}  (unknown): {raw_val}"
             if raw_val != 0:
-                line += f"  {warn('Non-zero value in reserved gap!')}"
+                line += f"  {warn('Non-zero value in unassigned space!')}"
         print(line)
 
     print()
