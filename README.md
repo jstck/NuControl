@@ -4,7 +4,13 @@ A browser-based configuration editor for the [NuEVI](https://berglundaudio.com/)
 
 ## Usage
 
-Open `config.html` in a browser — no server, build step, or installation required.
+Serve the directory with a local HTTP server (required so the browser can fetch `config-items.json`):
+
+```bash
+python3 -m http.server
+```
+
+Then open http://localhost:8000/config.html in a browser.
 
 ## Features
 
