@@ -87,16 +87,12 @@ data[13], data[14] = to_midi_u16(47)                  # set VERSION = 47
 save('invalid_version.syx', add_crc(data))
 
 # ── invalid_size: payload_size field says 180 (8 less than actual 188 payload bytes)
-# We keep all 188 payload bytes in the file, but set the size field to 180.
-# The parser will read 180 bytes, then find the CRC we place at offset 193.
-# Bytes 193-200 (the last 8 payload bytes) sit after the CRC as trailing data.
+# Full 188-byte payload is present; CRC covers all of it (at offset 201).
+# Parser reads size=180, looks for CRC at offset 193 — finds payload data instead,
+# so CRC check fails. Version/size check also fires (payload < expected for version).
 data = base()                                          # 13+188 = 201 bytes
 data[11], data[12] = to_midi_u16(180)                 # size field says 180
-# CRC covers header + first 180 payload bytes = bytes[0:193]
-crc_bytes = to_midi_crc(crc32(bytes(data[:193])))
-# Insert CRC at position 193, append remaining payload (193:201) after it
-out = bytes(data[:193]) + crc_bytes + bytes(data[193:])
-save('invalid_size.syx', out)
+save('invalid_size.syx', add_crc(data))               # CRC over all 201 bytes, at 201
 
 # ── invalid_command: change "NuEVIc01" → "NuFOOx99" (scanner won't find it)
 data = base()
