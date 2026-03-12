@@ -204,9 +204,8 @@
       if (data.length < SYSEX_HEADER_LEN + SYSEX_CRC_LEN)
         throw new Error(`Sysex too short (${data.length} bytes)`);
 
-      // Vendor ID
-      if (data[0] !== 0x00 || data[1] !== 0x3E || data[2] !== 0x7F)
-        throw new Error('Wrong vendor ID');
+      // Vendor ID — read but don't reject; caller may warn
+      const vendorId = [data[0], data[1], data[2]];
 
       // Header
       const hdr = String.fromCharCode(...data.subarray(3, 11));
@@ -237,7 +236,7 @@
       for (let addr = 0; addr < payloadSize; addr += 2)
         values[addr] = fromMidiU16(data[payloadBase + addr], data[payloadBase + addr + 1]);
 
-      return { version: values[0] ?? 0, values, checksumWarning };
+      return { version: values[0] ?? 0, values, checksumWarning, vendorId };
     }
 
     // Wrap 205-byte sysex payload in a minimal type-0 MIDI file.
@@ -279,14 +278,15 @@
     }
 
     // Scan raw bytes for the NuEVI sysex payload (variable length).
+    // Matches on the command string "NuEVIc01" regardless of vendor ID.
     // Returns a Uint8Array slice or throws.
     function findSysexInMidi(bytes) {
-      // Signature: vendor(3) + "NuEVIc01"(8) = 11 bytes
-      const sig = [0x00, 0x3E, 0x7F, 0x4E, 0x75, 0x45, 0x56, 0x49, 0x63, 0x30, 0x31];
+      // Match on the 8-byte command string at offset 3 (after 3 vendor ID bytes)
+      const cmd = [0x4E, 0x75, 0x45, 0x56, 0x49, 0x63, 0x30, 0x31]; // "NuEVIc01"
       const minLen = SYSEX_HEADER_LEN + SYSEX_CRC_LEN;
       outer: for (let i = 0; i <= bytes.length - minLen; i++) {
-        for (let j = 0; j < sig.length; j++) {
-          if (bytes[i + j] !== sig[j]) continue outer;
+        for (let j = 0; j < cmd.length; j++) {
+          if (bytes[i + 3 + j] !== cmd[j]) continue outer;
         }
         // Found — read payload size from header and extract the full block
         const payloadSize = fromMidiU16(bytes[i + 11], bytes[i + 12]);
@@ -554,7 +554,7 @@
               loadWarnings.value = [];
               const bytes = new Uint8Array(e.target.result);
               const sysexData = findSysexInMidi(bytes);
-              const { version: fileVersion, values, checksumWarning } = parseSysexData(sysexData);
+              const { version: fileVersion, values, checksumWarning, vendorId } = parseSysexData(sysexData);
 
               configName.value    = file.name.replace(/\.(mid|syx)$/i, '');
               configComment.value = '';
@@ -562,7 +562,10 @@
               const extraNames = applySysexValues(values, fileVersion);
               timeCreated.value = new Date().toISOString();
 
+              const knownVendor = SYSEX_VENDOR.every((b, i) => b === vendorId[i]);
               const warnings = [];
+              if (!knownVendor)
+                warnings.push(`Unknown vendor ID: ${vendorId.map(b => b.toString(16).padStart(2,'0')).join(' ')} (expected 00 3e 7f)`);
               if (checksumWarning) warnings.push(checksumWarning);
               if (extraNames.length)
                 warnings.push(`${extraNames.length} item(s) from a newer config version are loaded but hidden: ${extraNames.join(', ')}`);
