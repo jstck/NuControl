@@ -158,10 +158,15 @@ h1 {
 
 .midi-bar button:disabled { opacity: 0.4; cursor: default; }
 
+.midi-status-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .midi-status {
   font-size: 12px;
   color: #ffdd55;
-  margin-left: 4px;
 }
 
 .midi-status--error     { color: #ff8080; }

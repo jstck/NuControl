@@ -36,7 +36,10 @@
       <button @click="refreshMidi" title="Refresh device list">↻</button>
       <button @click="sendToInstrument" :disabled="!midiDeviceId">Send to instrument</button>
       <button @click="getFromInstrument" :disabled="!midiDeviceId || midiWaiting">Get from instrument</button>
-      <span class="midi-status" :class="{ 'midi-status--error': midiStatusErr, 'midi-status--connected': midiStatusConnected }" v-if="midiStatus">{{ midiStatus }}</span>
+      <div class="midi-status-lines">
+        <span class="midi-status midi-status--connected" v-if="midiConnectInfo">{{ midiConnectInfo }}</span>
+        <span class="midi-status" :class="{ 'midi-status--error': midiStatusErr, 'midi-status--connected': midiStatusConnected }" v-if="midiStatus">{{ midiStatus }}</span>
+      </div>
     </div>
 
     <div class="warn-banner" v-if="loadWarnings.length">
@@ -325,8 +328,9 @@
         const midiStatus    = ref('');
         const midiStatusErr = ref(false);
         const midiWaiting       = ref(false);
+        const midiDeviceConfigVer = ref(null); // config version reported by connected device
+        const midiConnectInfo = ref('');       // persistent query result, always shown
         const midiStatusConnected = computed(() =>
-          midiStatus.value.startsWith('Connected') ||
           midiStatus.value.startsWith('Config loaded') ||
           midiStatus.value === 'Sent.');
 
@@ -588,7 +592,8 @@
                   dev.input.onmidimessage = null;
                   const configVer = fromMidiU16(inner[11], inner[12]);
                   const fwVer = String.fromCharCode(...inner.subarray(13)).trim();
-                  midiStatus.value = `Connected to ${dev.name} ${fwVer}, config version ${configVer}`;
+                  midiDeviceConfigVer.value = configVer;
+                  midiConnectInfo.value = `Connected to ${dev.name} ${fwVer}, config version ${configVer}`;
                   midiStatusErr.value = false;
                 }
               }
@@ -602,6 +607,15 @@
             midiStatus.value = 'No MIDI output for selected device.';
             midiStatusErr.value = true;
             return;
+          }
+          const cfgVer = currentVersion.value;
+          const devVer = midiDeviceConfigVer.value;
+          if (devVer !== null && cfgVer !== devVer) {
+            const ok = confirm(
+              `The version of the config you are trying to send (${cfgVer}) does not match the instrument (${devVer}).\n` +
+              `This may lead to unexpected results. Do you want to continue?`
+            );
+            if (!ok) return;
           }
           const sysexData = buildSysexData(sections, itemVisible, getOffset, 'NuEVIc02');
           const msg = new Uint8Array(sysexData.length + 2);
@@ -705,6 +719,8 @@
         watch(midiDeviceId, newId => {
           midiStatus.value = '';
           midiStatusErr.value = false;
+          midiDeviceConfigVer.value = null;
+          midiConnectInfo.value = '';
           if (newId) queryDevice();
         });
 
@@ -851,7 +867,7 @@
                  bitfieldBits, getBit, setBit,
                  itemVisible, sectionVisible, step,
                  triggerLoad, loadFile, saveConfig, saveMidi, saveSyx,
-                 midiDevices, midiDeviceId, midiStatus, midiStatusErr, midiStatusConnected, midiWaiting,
+                 midiDevices, midiDeviceId, midiStatus, midiStatusErr, midiStatusConnected, midiConnectInfo, midiWaiting,
                  refreshMidi, queryDevice, sendToInstrument, getFromInstrument };
       }
     }).mount('#app');
