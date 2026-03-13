@@ -117,6 +117,55 @@ h1 {
   color: #555;
 }
 
+.midi-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #252525;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 8px 14px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.midi-bar select {
+  background: #1a1a1a;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 13px;
+  padding: 5px 8px;
+  flex: 1;
+  min-width: 160px;
+  outline: none;
+}
+
+.midi-bar select:focus { border-color: #666; }
+
+.midi-bar button {
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 5px 14px;
+  white-space: nowrap;
+}
+
+.midi-bar button:hover:not(:disabled) { background: #444; color: #fff; }
+
+.midi-bar button:disabled { opacity: 0.4; cursor: default; }
+
+.midi-status {
+  font-size: 12px;
+  color: #ffdd55;
+  margin-left: 4px;
+}
+
+.midi-status--error { color: #ff8080; }
+
 .section-heading {
   font-size: 13px;
   font-weight: 600;

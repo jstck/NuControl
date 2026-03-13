@@ -28,6 +28,17 @@
       <div class="meta-timestamp" v-if="timeCreated">Last edited: {{ timeCreated }}</div>
     </div>
 
+    <div class="midi-bar">
+      <select v-model="midiDeviceId">
+        <option value="">— Select MIDI device —</option>
+        <option v-for="d in midiDevices" :key="d.id" :value="d.id">{{ d.name }}</option>
+      </select>
+      <button @click="refreshMidi" title="Refresh device list">↻</button>
+      <button @click="sendToInstrument" :disabled="!midiDeviceId">Send to instrument</button>
+      <button @click="getFromInstrument" :disabled="!midiDeviceId || midiWaiting">Get from instrument</button>
+      <span class="midi-status" :class="{ 'midi-status--error': midiStatusErr }" v-if="midiStatus">{{ midiStatus }}</span>
+    </div>
+
     <div class="warn-banner" v-if="loadWarnings.length">
       <div v-for="w in loadWarnings" :key="w">{{ w }}</div>
     </div>
@@ -152,7 +163,7 @@
 
     // Build the sysex payload from the current section data.
     // Payload size = (max visible item address + 2), matching the device's own logic.
-    function buildSysexData(sections, isVisible, getOffset) {
+    function buildSysexData(sections, isVisible, getOffset, command = 'NuEVIc01') {
       // Find highest address among visible items
       let maxAddr = 0;
       for (const section of sections)
@@ -165,8 +176,8 @@
       // Vendor ID
       buf[0] = 0x00; buf[1] = 0x3E; buf[2] = 0x7F;
 
-      // Header "NuEVIc01"
-      for (let i = 0; i < 8; i++) buf[3 + i] = SYSEX_HEADER.charCodeAt(i);
+      // Command string (e.g. "NuEVIc01", "NuEVIc02")
+      for (let i = 0; i < 8; i++) buf[3 + i] = command.charCodeAt(i);
 
       // Payload size field
       const [ps0, ps1] = toMidiU16(payloadSize);
@@ -307,6 +318,13 @@
         const configComment = ref('');
         const timeCreated   = ref('');
         const fileInput     = ref(null);
+
+        const midiAccess    = ref(null);
+        const midiDevices   = ref([]);
+        const midiDeviceId  = ref('');
+        const midiStatus    = ref('');
+        const midiStatusErr = ref(false);
+        const midiWaiting   = ref(false);
 
         function getOffset(item) {
           const m = (item.dataModel || '').match(/^offset:(-?\d+)$/);
@@ -479,6 +497,143 @@
           return extraNames;
         }
 
+        // ── MIDI ─────────────────────────────────────────────────────────────
+
+        function enumerateMidiDevices() {
+          if (!midiAccess.value) return;
+          const byName = {};
+          for (const port of midiAccess.value.inputs.values()) {
+            if (!byName[port.name]) byName[port.name] = { id: port.name, name: port.name, input: null, output: null };
+            byName[port.name].input = port;
+          }
+          for (const port of midiAccess.value.outputs.values()) {
+            if (!byName[port.name]) byName[port.name] = { id: port.name, name: port.name, input: null, output: null };
+            byName[port.name].output = port;
+          }
+          midiDevices.value = Object.values(byName);
+        }
+
+        function initMidi() {
+          if (!navigator.requestMIDIAccess) {
+            midiStatus.value = 'Web MIDI not supported in this browser.';
+            midiStatusErr.value = true;
+            return;
+          }
+          navigator.requestMIDIAccess({ sysex: true })
+            .then(access => {
+              midiAccess.value = access;
+              enumerateMidiDevices();
+              access.onstatechange = () => enumerateMidiDevices();
+            })
+            .catch(err => {
+              midiStatus.value = `MIDI access denied: ${err.message}`;
+              midiStatusErr.value = true;
+            });
+        }
+
+        function refreshMidi() {
+          enumerateMidiDevices();
+        }
+
+        function sendToInstrument() {
+          const dev = midiDevices.value.find(d => d.id === midiDeviceId.value);
+          if (!dev?.output) {
+            midiStatus.value = 'No MIDI output for selected device.';
+            midiStatusErr.value = true;
+            return;
+          }
+          const sysexData = buildSysexData(sections, itemVisible, getOffset, 'NuEVIc02');
+          const msg = new Uint8Array(sysexData.length + 2);
+          msg[0] = 0xF0;
+          msg.set(sysexData, 1);
+          msg[msg.length - 1] = 0xF7;
+          dev.output.send(msg);
+          midiStatus.value = 'Sent.';
+          midiStatusErr.value = false;
+          setTimeout(() => { if (midiStatus.value === 'Sent.') midiStatus.value = ''; }, 2000);
+        }
+
+        function getFromInstrument() {
+          const dev = midiDevices.value.find(d => d.id === midiDeviceId.value);
+          if (!dev?.output) {
+            midiStatus.value = 'No MIDI output for selected device.';
+            midiStatusErr.value = true;
+            return;
+          }
+          if (!dev?.input) {
+            midiStatus.value = 'No MIDI input for selected device.';
+            midiStatusErr.value = true;
+            return;
+          }
+
+          // Send "NuEVIc00" request: F0 + vendor(3) + command(8) + F7 = 13 bytes
+          const req = new Uint8Array(13);
+          req[0] = 0xF0;
+          SYSEX_VENDOR.forEach((b, i) => { req[1 + i] = b; });
+          const reqCmd = 'NuEVIc00';
+          for (let i = 0; i < 8; i++) req[4 + i] = reqCmd.charCodeAt(i);
+          req[12] = 0xF7;
+          dev.output.send(req);
+
+          midiStatus.value = 'Waiting for response\u2026';
+          midiStatusErr.value = false;
+          midiWaiting.value = true;
+          let buf = [];
+          let inSysex = false;
+
+          function cleanup() {
+            dev.input.onmidimessage = null;
+            clearTimeout(timeoutId);
+            midiWaiting.value = false;
+          }
+
+          const timeoutId = setTimeout(() => {
+            cleanup();
+            midiStatus.value = 'Timed out — no response from instrument.';
+            midiStatusErr.value = true;
+          }, 5000);
+
+          dev.input.onmidimessage = event => {
+            for (const byte of event.data) {
+              if (byte === 0xF0) { buf = [0xF0]; inSysex = true; }
+              else if (inSysex) {
+                buf.push(byte);
+                if (byte === 0xF7) {
+                  inSysex = false;
+                  const inner = new Uint8Array(buf.slice(1, -1));
+                  if (inner.length < 11) return;
+                  const hdr = String.fromCharCode(...inner.subarray(3, 11));
+                  if (hdr !== 'NuEVIc01') return; // not our response, keep waiting
+                  cleanup();
+                  try {
+                    const { version: fileVersion, values, checksumWarning, vendorId } = parseSysexData(inner);
+                    const extraNames = applySysexValues(values, fileVersion);
+                    configName.value    = '';
+                    configComment.value = '';
+                    timeCreated.value   = new Date().toISOString();
+                    const knownVendor = SYSEX_VENDOR.every((b, i) => b === vendorId[i]);
+                    const warnings = [];
+                    if (!knownVendor)
+                      warnings.push(`Unknown vendor ID: ${vendorId.map(b => b.toString(16).padStart(2,'0')).join(' ')} (expected 00 3e 7f)`);
+                    if (checksumWarning) warnings.push(checksumWarning);
+                    if (extraNames.length)
+                      warnings.push(`${extraNames.length} item(s) from a newer config version are loaded but hidden: ${extraNames.join(', ')}`);
+                    loadWarnings.value  = warnings;
+                    loadError.value     = '';
+                    midiStatus.value    = 'Config loaded from instrument.';
+                    midiStatusErr.value = false;
+                  } catch (err) {
+                    midiStatus.value    = `Error: ${err.message}`;
+                    midiStatusErr.value = true;
+                  }
+                }
+              }
+            }
+          };
+        }
+
+        initMidi();
+
         // ── Load / save ──────────────────────────────────────────────────────
 
         function triggerLoad() {
@@ -617,7 +772,9 @@
                  touch, validate, normalize, sliderValue, setSlider, itemRangeText, selectOptions,
                  bitfieldBits, getBit, setBit,
                  itemVisible, sectionVisible, step,
-                 triggerLoad, loadFile, saveConfig, saveMidi, saveSyx };
+                 triggerLoad, loadFile, saveConfig, saveMidi, saveSyx,
+                 midiDevices, midiDeviceId, midiStatus, midiStatusErr, midiWaiting,
+                 refreshMidi, sendToInstrument, getFromInstrument };
       }
     }).mount('#app');
   </script>
