@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NuEVI Config</title>
   <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-  <link rel="stylesheet" href="config.css">
+  <link rel="stylesheet" href="style.css">
   <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48 64x64" type="image/x-icon">
 </head>
 <body>
   <div id="app">
-    <h1>NuEVI Config</h1>
+    <h1>NuEVI Config <a href="guide.html" style="font-size:13px; font-weight:normal; color:#7aabff; margin-left:10px;">User guide</a></h1>
     <div class="error-banner" v-if="loadError">{{ loadError }}</div>
 
     <div class="meta">

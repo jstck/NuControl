@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NuEVI Config — User Guide</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48 64x64" type="image/x-icon">
+  <style>
+    body { max-width: 760px; margin: 0 auto; padding: 24px 20px 60px; }
+    h2 { color: #ccc; font-size: 18px; margin: 32px 0 10px; border-bottom: 1px solid #333; padding-bottom: 6px; }
+    h3 { color: #bbb; font-size: 14px; margin: 22px 0 6px; }
+    p, li { color: #aaa; font-size: 13px; line-height: 1.7; }
+    ul, ol { padding-left: 20px; margin: 6px 0 10px; }
+    li { margin-bottom: 4px; }
+    .note {
+      background: #252525;
+      border-left: 3px solid #555;
+      border-radius: 0 4px 4px 0;
+      padding: 10px 14px;
+      margin: 12px 0;
+      font-size: 13px;
+      color: #999;
+    }
+    .note strong { color: #bbb; }
+    .warn {
+      background: #2a2500;
+      border-left: 3px solid #776600;
+      border-radius: 0 4px 4px 0;
+      padding: 10px 14px;
+      margin: 12px 0;
+      font-size: 13px;
+      color: #ccaa33;
+    }
+    .warn strong { color: #ddbb44; }
+    kbd {
+      background: #333;
+      border: 1px solid #555;
+      border-radius: 3px;
+      padding: 1px 6px;
+      font-size: 12px;
+      color: #ccc;
+      font-family: inherit;
+    }
+    .ui-label {
+      background: #333;
+      border: 1px solid #555;
+      border-radius: 3px;
+      padding: 1px 7px;
+      font-size: 12px;
+      color: #ccc;
+    }
+    .step-num {
+      display: inline-block;
+      background: #444;
+      color: #ccc;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      text-align: center;
+      line-height: 20px;
+      font-size: 12px;
+      margin-right: 6px;
+      flex-shrink: 0;
+    }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 0;
+      margin-bottom: 10px;
+    }
+    .step p { margin: 0; padding-top: 1px; }
+    a { color: #7aabff; }
+  </style>
+</head>
+<body>
+
+<h1>NuEVI Config — User Guide</h1>
+
+<p>This tool lets you read, edit, and write the configuration of your NuEVI or NuRAD instrument directly from your browser. No software installation is required.</p>
+
+<h2>Browser compatibility</h2>
+
+<p>This tool uses the <strong>Web MIDI API</strong> to communicate with your instrument. The following browsers are supported:</p>
+
+<ul>
+  <li><strong>Chrome</strong> — recommended</li>
+  <li><strong>Firefox</strong> (version 99 and later)</li>
+  <li><strong>Microsoft Edge</strong></li>
+  <li><strong>Opera</strong></li>
+</ul>
+
+<div class="warn">
+  <strong>Safari is not supported.</strong> Apple has not implemented the Web MIDI API in Safari. Use one of the browsers listed above instead.
+</div>
+
+<p>The page must be served over HTTPS, or from <code>localhost</code> (e.g. a local web server on your computer). Opening the file directly from disk will not work for MIDI features.</p>
+
+
+<h2>Putting the instrument in config mode</h2>
+
+<p>Before the instrument can communicate with this tool, it must be in <strong>config mode</strong>. In this mode, the instrument acts as a USB MIDI device and will not play notes.</p>
+
+<div class="step"><span class="step-num">1</span><p>Connect the instrument to your computer with a USB cable.</p></div>
+<div class="step"><span class="step-num">2</span><p>Hold down both the <kbd>Up</kbd> and <kbd>Down</kbd> buttons on the instrument.</p></div>
+<div class="step"><span class="step-num">3</span><p>While holding the buttons, turn the power switch on (or cycle power if already on).</p></div>
+
+<div class="note">
+  <strong>Tip:</strong> Because the instrument powers up when USB is connected, it can be tricky to hold the buttons while plugging in. An easier approach: turn the instrument on first, then connect the USB cable, then hold the up and down buttons and switch the power off. The instrument will reboot as it switches to USB power and will enter config mode.
+</div>
+
+<p>To exit config mode, simply restart the instrument normally (without holding the buttons).</p>
+
+
+<h2>Connecting in the browser</h2>
+
+<div class="step"><span class="step-num">1</span><p>Open the config tool in your browser. The <strong>MIDI device bar</strong> appears below the name and save/load buttons.</p></div>
+<div class="step"><span class="step-num">2</span><p>The first time you use the tool, your browser will ask for permission to access MIDI devices. Click <strong>Allow</strong>.</p></div>
+<div class="step"><span class="step-num">3</span><p>If your instrument is in config mode, it will appear in the device dropdown — and will be selected automatically if it is the only NuEVI/NuRAD connected.</p></div>
+<div class="step"><span class="step-num">4</span><p>Once a device is selected, the tool queries it automatically. You should see a green <em>Connected to …</em> message showing the firmware version and config version.</p></div>
+
+<div class="note">
+  If no device appears, click the <span class="ui-label">↻</span> button to refresh the device list. Make sure the instrument is in config mode and the USB cable is securely connected.
+</div>
+
+
+<h2>Downloading config from the instrument</h2>
+
+<p>To read the current configuration stored on the instrument:</p>
+
+<div class="step"><span class="step-num">1</span><p>Select your instrument in the device dropdown (it should already be selected).</p></div>
+<div class="step"><span class="step-num">2</span><p>Click <span class="ui-label">Get from instrument</span>. The status will show <em>Waiting for response…</em></p></div>
+<div class="step"><span class="step-num">3</span><p>After a moment, all config values will be populated from the instrument and the status will show <em>Config loaded from instrument.</em></p></div>
+
+<p>You can now view and edit all settings.</p>
+
+
+<h2>Editing settings</h2>
+
+<p>Settings are grouped into sections such as <em>Breath</em>, <em>Pitch Bend</em>, <em>MIDI</em>, <em>Keys</em>, and so on. Each section can be expanded or collapsed by clicking its heading.</p>
+
+<ul>
+  <li><strong>Sliders</strong> — drag left or right, or click to set a value. The number can also be typed directly.</li>
+  <li><strong>Dropdowns</strong> — click to choose from a list of named options.</li>
+  <li><strong>Checkboxes</strong> — click to toggle on or off.</li>
+</ul>
+
+<div class="note">
+  Settings that do not apply to your instrument's firmware version are hidden automatically.
+</div>
+
+
+<h2>Sending config to the instrument</h2>
+
+<div class="step"><span class="step-num">1</span><p>Make sure your instrument is connected and shown as <em>Connected</em> in the MIDI bar.</p></div>
+<div class="step"><span class="step-num">2</span><p>Click <span class="ui-label">Send to instrument</span>.</p></div>
+<div class="step"><span class="step-num">3</span><p>The status will briefly show <em>Sent.</em> The instrument receives and stores the new configuration immediately.</p></div>
+
+<div class="warn">
+  <strong>Version mismatch:</strong> If the config version in the editor does not match the version reported by the instrument, you will be warned before sending. Sending a mismatched config may cause unexpected behaviour. It is safest to always start from a config downloaded from the instrument itself.
+</div>
+
+
+<h2>Saving and loading config files</h2>
+
+<p>You can save your configuration to a file as a backup, or to share with others. Three formats are available:</p>
+
+<ul>
+  <li><span class="ui-label">Save JSON</span> — saves a human-readable file. Can be loaded back into this tool. Best for archiving and sharing.</li>
+  <li><span class="ui-label">Save MIDI</span> — saves a standard MIDI file (<code>.mid</code>) containing the config as a sysex message. Can be sent to the instrument with any MIDI utility that supports sysex.</li>
+  <li><span class="ui-label">Save SysEx</span> — saves a raw sysex file (<code>.syx</code>). Compatible with most MIDI sysex utilities.</li>
+</ul>
+
+<p>To load a previously saved file, click <span class="ui-label">Load</span> and select a <code>.json</code>, <code>.mid</code>, or <code>.syx</code> file.</p>
+
+<div class="note">
+  The <strong>Config name</strong> field (top of the page) and the optional <strong>Comment</strong> field are saved with JSON files. Use them to keep track of different setups.
+</div>
+
+
+<h2>Typical workflow</h2>
+
+<ol>
+  <li>Put the instrument in config mode and connect via USB.</li>
+  <li>Open the config tool in Chrome (or Firefox/Edge/Opera).</li>
+  <li>Click <span class="ui-label">Get from instrument</span> to load the current settings.</li>
+  <li>Optionally save a backup with <span class="ui-label">Save JSON</span>.</li>
+  <li>Adjust any settings you want to change.</li>
+  <li>Click <span class="ui-label">Send to instrument</span>.</li>
+  <li>Restart the instrument to return to normal playing mode.</li>
+</ol>
+
+</body>
+</html>
